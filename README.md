@@ -7,7 +7,7 @@ sheet, color-tiers each member, and posts a short summary back in Discord.
 
 ## What it does
 
-- **Reads the screenshots with OCR** — pulls each member's name and weekly activity
+- **Reads the screenshots with OCR**: pulls each member's name and weekly activity
   points straight from the images.
 - **Matches names to your roster** (read live from the sheet), so odd spellings,
   bullets, and non-Latin names still line up with the right member.
