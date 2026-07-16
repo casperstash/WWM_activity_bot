@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# secrets — never commit
+.env
+service-account.json
+
+# local setup notes (kept private)
+SETUP.md
+
+# local state / learned data
+aliases.json
+grading.json
+
+# misc
+*.traineddata
+.tmp/
