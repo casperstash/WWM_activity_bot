@@ -7,6 +7,7 @@ service-account.json
 
 # local setup notes (kept private)
 SETUP.md
+CHECKLIST.md
 
 # local state / learned data
 aliases.json

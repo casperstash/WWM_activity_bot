@@ -55,8 +55,8 @@ function n(x) {
 export function gradingEmbed(g, updated) {
   return new EmbedBuilder()
     .setColor(BRAND.accent)
-    .setAuthor({ name: "Serene · Grading" })
-    .setTitle(`${heading("Grading")}${updated ? "  ·  updated" : ""}`)
+    .setAuthor({ name: "Serene · Tiers" })
+    .setTitle(`${heading("Tiers")}${updated ? "  ·  updated" : ""}`)
     .setDescription(
       [
         "Weekly points decide each member's tier:",
