@@ -50,6 +50,28 @@ function chunkList(items, max = 1000) {
   return chunks.length ? chunks : ["—"];
 }
 
+// One column's value. Inline fields can't span multiple fields without breaking
+// the row layout, so a column is one field: show the whole list if it fits
+// Discord's 1024-char cap, otherwise pack what fits and append "…and N more".
+function columnValue(items) {
+  if (!items.length) return "—";
+  const full = items.join("\n");
+  if (full.length <= 1024) return full;
+  const lines = [];
+  let len = 0;
+  for (let i = 0; i < items.length; i++) {
+    const add = (lines.length ? 1 : 0) + items[i].length;
+    if (len + add > 980) {
+      // leave headroom for the note
+      lines.push(`…and ${items.length - i} more`);
+      break;
+    }
+    lines.push(items[i]);
+    len += add;
+  }
+  return lines.join("\n");
+}
+
 /**
  * The weekly report.
  *
@@ -84,30 +106,21 @@ export function buildReport({ date, preview, admin = false, batch, roster, writt
       embed.addFields({ name: `🔎 Double-check these names (${review.length})`, value: chunk });
     }
   }
-  if (flaggedRed.length) {
-    for (const chunk of chunkList(flaggedRed)) {
-      embed.addFields({ name: `🔴 ${names.lurker} (${flaggedRed.length})`, value: chunk });
-    }
-  }
-  if (flaggedYellow.length) {
-    for (const chunk of chunkList(flaggedYellow)) {
-      embed.addFields({ name: `🟡 ${names.developing} (${flaggedYellow.length})`, value: chunk });
-    }
-  }
-  if (flaggedPillar.length) {
-    for (const chunk of chunkList(flaggedPillar)) {
-      embed.addFields({ name: `🟢 ${names.pillar} (${flaggedPillar.length})`, value: chunk });
-    }
-  }
-  if (missing.length) {
-    for (const chunk of chunkList(missing.map((e) => `${e.ign} (${e.status})`))) {
-      embed.addFields({ name: `✍️ Add by hand (${missing.length})`, value: chunk });
-    }
-  }
-  if (unknowns.length) {
-    for (const chunk of chunkList(unknowns.map((u) => `${u.name} → ${u.points}`))) {
-      embed.addFields({ name: `❓ New members? (${unknowns.length})`, value: chunk });
-    }
+  // The three tiers as side-by-side columns (inline fields group 3-across).
+  // Always add all three so the row stays aligned even if a tier is empty.
+  embed.addFields(
+    { name: `🔴 ${names.lurker} (${flaggedRed.length})`, value: columnValue(flaggedRed), inline: true },
+    { name: `🟡 ${names.developing} (${flaggedYellow.length})`, value: columnValue(flaggedYellow), inline: true },
+    { name: `🟢 ${names.pillar} (${flaggedPillar.length})`, value: columnValue(flaggedPillar), inline: true }
+  );
+  // Bottom two, also as columns (a 2-across row under the three tiers). Shown
+  // together so the row stays aligned when only one has entries. The Add-by-hand
+  // BUTTON still handles every missing member even if the display truncates.
+  if (missing.length || unknowns.length) {
+    embed.addFields(
+      { name: `✍️ Add by hand (${missing.length})`, value: columnValue(missing.map((e) => `${e.ign} (${e.status})`)), inline: true },
+      { name: `❓ New members? (${unknowns.length})`, value: columnValue(unknowns.map((u) => `${u.name} → ${u.points}`)), inline: true }
+    );
   }
   if (conflicts.length) {
     for (const chunk of chunkList(conflicts.map((c) => `${c.ign}: ${c.values.join(" / ")}`))) {
