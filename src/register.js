@@ -21,6 +21,14 @@ try {
     console.error("Discord rejected the token. Check DISCORD_TOKEN and APP_ID in .env (SETUP.md §1).");
   } else if (err.status === 404) {
     console.error("Discord couldn't find that application/guild. Check APP_ID and GUILD_ID in .env (SETUP.md §1).");
+  } else if (err.status === 403 || /missing access/i.test(err.message || "")) {
+    console.error(
+      "Missing Access — the bot was invited WITHOUT the 'applications.commands' scope\n" +
+        "(or GUILD_ID isn't a server the bot is in).\n" +
+        "Fix: OAuth2 → URL Generator → check BOTH 'bot' and 'applications.commands' in the\n" +
+        "SCOPES section (separate from permissions), open the generated URL, and re-authorize\n" +
+        "the bot on your server. Then run this again — no need to remove the bot first."
+    );
   } else {
     console.error("Registration failed:", err.message);
   }

@@ -156,6 +156,61 @@ export async function writeCell(date, row, value) {
   return { flag };
 }
 
+/**
+ * Insert a brand-new member row right after the last member (above the blank/
+ * summary block) and fill identity + this week's points.
+ * Identity cells are written RAW so leading-zero UIDs ("0013089654") survive.
+ */
+export async function addMemberRow(date, { uid, ign, discord, status, points }) {
+  const sheets = await client();
+  const sheetId = await getSheetId(sheets);
+
+  // Last row that has an IGN — same walk as readRoster.
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A1:D` });
+  const rows = res.data.values ?? [];
+  let lastRow = 1;
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i]?.[1] ?? "").trim()) lastRow = i + 1;
+  }
+  const newRow = lastRow + 1;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          insertDimension: {
+            range: { sheetId, dimension: "ROWS", startIndex: lastRow, endIndex: lastRow + 1 },
+            inheritFromBefore: true, // inherit member-row formatting, not the summary block's
+          },
+        },
+      ],
+    },
+  });
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${sheetName}!A${newRow}:D${newRow}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[uid, ign, discord, status]] },
+  });
+
+  let flag = null;
+  if (points != null) ({ flag } = await writeCell(date, newRow, points));
+  return { row: newRow, flag };
+}
+
+/** Update one member's Status cell (column D). */
+export async function updateStatus(row, status) {
+  const sheets = await client();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${sheetName}!D${row}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[status]] },
+  });
+}
+
 /** Clear one member's value + fill in an existing week column (deny a match). */
 export async function clearCell(date, row) {
   const sheets = await client();

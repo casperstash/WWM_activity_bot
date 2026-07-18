@@ -1,8 +1,18 @@
 import { PermissionFlagsBits } from "discord.js";
 import { getSession, saveSession, markResolved } from "./store.js";
-import { reviewStep, missingSelect, missingModal, unknownLinkSelect, availableUnknowns, MANUAL } from "./components.js";
-import { writeCell, clearCell } from "../sheets.js";
+import {
+  reviewStep,
+  missingSelect,
+  missingModal,
+  unknownLinkSelect,
+  newMemberSelect,
+  newMemberModal,
+  availableUnknowns,
+  MANUAL,
+} from "./components.js";
+import { writeCell, clearCell, addMemberRow, updateStatus } from "../sheets.js";
 import { setAlias, removeAlias } from "../aliases.js";
+import { normalizeName } from "../roster.js";
 import { runActivityProcess } from "../run.js";
 
 const EXPIRED = "This review has expired — run `/scan` again to get fresh buttons.";
@@ -20,6 +30,7 @@ export async function handleComponent(interaction) {
     if (ns === "rt") return await onRetry(interaction);
     if (ns === "rv") return await onReview(interaction, action);
     if (ns === "ms") return await onMissing(interaction, action);
+    if (ns === "nm") return await onNewMember(interaction, action);
   } catch (err) {
     console.error("component handler error:", err);
     const msg = `Couldn't do that: ${err.message}`;
@@ -141,10 +152,77 @@ async function onMissing(interaction, action) {
       setAlias(reading, member.uid, member.ign);
       learned = ` and learned “${reading}”`;
     }
+
+    // Optional: update the member's Status (column D) at the same time.
+    const status = interaction.fields.getTextInputValue("status")?.trim();
+    let statusNote = "";
+    if (status) {
+      await updateStatus(row, status);
+      if (member) member.status = status;
+      statusNote = ` · status → **${status}**`;
+    }
+
     markResolved(sid, row);
     return interaction.reply({
-      content: `✅ Saved **${value}** for **${member?.ign ?? `row ${row}`}**${learned}.`,
+      content: `✅ Saved **${value}** for **${member?.ign ?? `row ${row}`}**${learned}${statusNote}.`,
       ...withComponents(missingSelect(session, sid)),
+      ephemeral: true,
+    });
+  }
+}
+
+async function onNewMember(interaction, action) {
+  if (action === "start") {
+    const sid = interaction.message.id;
+    const session = getSession(sid);
+    if (!session) return interaction.reply({ content: EXPIRED, ephemeral: true });
+    return interaction.reply({ ...newMemberSelect(session, sid), ephemeral: true });
+  }
+
+  if (action === "pick") {
+    // nm:pick:<sid> — reading chosen; open the identity form
+    const [, , sid] = interaction.customId.split(":");
+    const session = getSession(sid);
+    if (!session) return interaction.reply({ content: EXPIRED, ephemeral: true });
+    const idx = Number(interaction.values[0]);
+    const unknown = session.unknowns?.[idx];
+    if (!unknown) return interaction.reply({ content: "That reading is gone — run `/scan` again.", ephemeral: true });
+    return interaction.showModal(newMemberModal(sid, idx, unknown));
+  }
+
+  if (action === "save") {
+    // nm:save:<sid>:<idx> — modal submit: create the roster row
+    const [, , sid, idxStr] = interaction.customId.split(":");
+    const idx = Number(idxStr);
+    const session = getSession(sid);
+    if (!session) return interaction.reply({ content: EXPIRED, ephemeral: true });
+    const unknown = session.unknowns?.[idx];
+    if (!unknown) return interaction.reply({ content: "That reading is gone — run `/scan` again.", ephemeral: true });
+
+    const ign = interaction.fields.getTextInputValue("ign").trim();
+    const uid = interaction.fields.getTextInputValue("uid").trim().replace(/\s+/g, "");
+    const discord = interaction.fields.getTextInputValue("discord").trim();
+    const status = interaction.fields.getTextInputValue("status")?.trim() || "Active";
+
+    if (!/^\d{5,15}$/.test(uid)) {
+      return interaction.reply({
+        content: `“${uid}” doesn't look like a UID — it's the numeric game id (digits only), e.g. 1045385312. Press ➕ New members and try again.`,
+        ephemeral: true,
+      });
+    }
+
+    const { row } = await addMemberRow(session.date, { uid, ign, discord, status, points: unknown.points });
+
+    // If the officer corrected the misread name, remember the screenshot's
+    // version so it matches this member automatically from next week.
+    if (normalizeName(unknown.name) !== normalizeName(ign)) {
+      setAlias(unknown.name, uid, ign);
+    }
+
+    session.usedUnknowns?.add(idx);
+    return interaction.reply({
+      content: `✅ Added **${ign}** (${status}) to the roster — row ${row}, **${unknown.points}** points for ${session.date}.`,
+      ...withComponents(newMemberSelect(session, sid)),
       ephemeral: true,
     });
   }

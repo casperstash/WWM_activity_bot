@@ -47,7 +47,9 @@ name changes.
 | `messages:` | How many recent messages to scan for screenshots |
 
 Buttons on the report: **Double-check names** (approve / deny), **Add by hand**
-(fill a missing member), and **Try again** on a failed run.
+(fill a missing member — can also update their status), **New members** (add an
+unrecognized name to the roster: it asks for UID, Discord, and status, then
+creates the row with that week's points), and **Try again** on a failed run.
 
 **`/grade`** (officer-only) sets the point cutoffs and tier names — run it with no
 options to see the current scale, or set any of: `lurker_under:`, `developing_under:`,

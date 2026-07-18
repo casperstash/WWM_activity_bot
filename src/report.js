@@ -20,6 +20,15 @@ function flaggedList(results, flag) {
     .map((r) => `${r.entry.ign} — ${r.points}`);
 }
 
+// Pillars aren't a flag color (they're the healthy top tier); list by threshold,
+// highest first so the top contributors lead.
+function pillarList(results, floor) {
+  return [...results.values()]
+    .filter((r) => Number(r.points) >= floor)
+    .sort((a, b) => b.points - a.points)
+    .map((r) => `${r.entry.ign} — ${r.points}`);
+}
+
 function reviewList(results) {
   return [...results.values()]
     .filter((r) => needsReview(r.score))
@@ -53,11 +62,11 @@ export function buildReport({ date, preview, admin = false, batch, roster, writt
 
   const missing = roster.filter((e) => !results.has(e.row));
   const flagCounts = flags ?? countFlags(results);
-  const healthy = Math.max(0, results.size - flagCounts.red - flagCounts.yellow);
+  const { names, developingUnder } = getGrading();
   const flaggedRed = flaggedList(results, "red");
   const flaggedYellow = flaggedList(results, "yellow");
+  const flaggedPillar = pillarList(results, developingUnder);
   const review = reviewList(results);
-  const { names, lurkerUnder, developingUnder } = getGrading();
 
   const embed = new EmbedBuilder()
     .setColor(preview ? BRAND.muted : BRAND.success)
@@ -66,7 +75,7 @@ export function buildReport({ date, preview, admin = false, batch, roster, writt
     .setDescription(
       [
         preview ? "_Preview — nothing has been saved yet._" : "Recorded. Here's who to keep an eye on:",
-        `🔴 **${flagCounts.red}** ${names.lurker}    🟡 **${flagCounts.yellow}** ${names.developing}    🟢 **${healthy}** ${names.pillar}`,
+        `🔴 **${flagCounts.red}** ${names.lurker}    🟡 **${flagCounts.yellow}** ${names.developing}    🟢 **${flaggedPillar.length}** ${names.pillar}`,
       ].join("\n\n")
     );
 
@@ -77,12 +86,17 @@ export function buildReport({ date, preview, admin = false, batch, roster, writt
   }
   if (flaggedRed.length) {
     for (const chunk of chunkList(flaggedRed)) {
-      embed.addFields({ name: `🔴 ${names.lurker} — under ${lurkerUnder} (${flaggedRed.length})`, value: chunk });
+      embed.addFields({ name: `🔴 ${names.lurker} (${flaggedRed.length})`, value: chunk });
     }
   }
   if (flaggedYellow.length) {
     for (const chunk of chunkList(flaggedYellow)) {
-      embed.addFields({ name: `🟡 ${names.developing} — ${lurkerUnder} to ${developingUnder - 1} (${flaggedYellow.length})`, value: chunk });
+      embed.addFields({ name: `🟡 ${names.developing} (${flaggedYellow.length})`, value: chunk });
+    }
+  }
+  if (flaggedPillar.length) {
+    for (const chunk of chunkList(flaggedPillar)) {
+      embed.addFields({ name: `🟢 ${names.pillar} (${flaggedPillar.length})`, value: chunk });
     }
   }
   if (missing.length) {

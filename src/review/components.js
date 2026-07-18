@@ -12,18 +12,21 @@ import { BRAND } from "../brand.js";
 import { confidencePct } from "../roster.js";
 
 // customId scheme (":" separated): <ns>:<action>[:<sessionId>[:<row>]]
-//   rv = review names, ms = add missing, rt = retry.
+//   rv = review names, ms = add missing, nm = new member, rt = retry.
 // sessionId is the report message id — carried on the ephemeral steppers so
 // their buttons can find the session (their own message id differs).
 export const ID = {
   reviewStart: "rv:start",
   missingStart: "ms:start",
+  newMemberStart: "nm:start",
   retry: "rt:start",
   reviewApprove: (sid, row) => `rv:ok:${sid}:${row}`,
   reviewDeny: (sid, row) => `rv:no:${sid}:${row}`,
   missingPick: (sid) => `ms:pick:${sid}`,
   missingLink: (sid, row) => `ms:link:${sid}:${row}`,
   missingSave: (sid, row) => `ms:save:${sid}:${row}`,
+  newMemberPick: (sid) => `nm:pick:${sid}`,
+  newMemberSave: (sid, idx) => `nm:save:${sid}:${idx}`,
 };
 
 // Select value meaning "none of these — let me type it" in the link step.
@@ -37,7 +40,7 @@ export function availableUnknowns(session) {
 }
 
 /** Buttons under a normal report: only shown for sections that have items. */
-export function reportComponents({ review = [], missing = [] } = {}) {
+export function reportComponents({ review = [], missing = [], unknowns = [] } = {}) {
   const row = new ActionRowBuilder();
   if (review.length) {
     row.addComponents(
@@ -55,6 +58,15 @@ export function reportComponents({ review = [], missing = [] } = {}) {
         .setLabel(`Add by hand (${missing.length})`)
         .setStyle(ButtonStyle.Secondary)
         .setEmoji("✍️")
+    );
+  }
+  if (unknowns.length) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(ID.newMemberStart)
+        .setLabel(`New members (${unknowns.length})`)
+        .setStyle(ButtonStyle.Success)
+        .setEmoji("➕")
     );
   }
   return row.components.length ? [row] : [];
@@ -167,6 +179,88 @@ export function missingModal(sid, row, ign) {
           .setLabel("Name the screenshot showed (optional)")
           .setStyle(TextInputStyle.Short)
           .setPlaceholder("I'll remember it so it matches next week")
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("status")
+          .setLabel("Update status (optional)")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("Active / Hiatus / Kick Next — blank = keep current")
+          .setMaxLength(24)
+          .setRequired(false)
+      )
+    );
+}
+
+/** Pick which unmatched reading to add to the roster as a brand-new member. */
+export function newMemberSelect(session, sid) {
+  const remaining = availableUnknowns(session);
+  if (!remaining.length) {
+    return {
+      embeds: [new EmbedBuilder().setColor(BRAND.success).setDescription("✅ No unmatched readings left — everyone's on the roster.")],
+      components: [],
+    };
+  }
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(ID.newMemberPick(sid))
+    .setPlaceholder("Pick the name to add to the roster")
+    .addOptions(
+      remaining.slice(0, 25).map((u) => ({
+        label: u.name.slice(0, 100),
+        description: `${u.points} pts — add as a new member`.slice(0, 100),
+        value: String(u.i),
+      }))
+    );
+  const embed = new EmbedBuilder()
+    .setColor(BRAND.accent)
+    .setDescription(
+      `**${remaining.length}** name(s) from the screenshots aren't on the roster. ` +
+        `Pick one to add — I'll ask for their UID, Discord, and status, then create the row with this week's points.`
+    );
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)] };
+}
+
+/** Form for the new member's identity. IGN is pre-filled from the screenshot. */
+export function newMemberModal(sid, idx, unknown) {
+  return new ModalBuilder()
+    .setCustomId(ID.newMemberSave(sid, idx))
+    .setTitle(`New member · ${unknown.points} pts`.slice(0, 45))
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("ign")
+          .setLabel("In-game name (fix any misread)")
+          .setStyle(TextInputStyle.Short)
+          .setValue(String(unknown.name).slice(0, 80))
+          .setMaxLength(80)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("uid")
+          .setLabel("UID (numeric game id)")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("e.g. 1045385312")
+          .setMaxLength(15)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("discord")
+          .setLabel("Discord (as in the sheet)")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("DisplayName (username)")
+          .setMaxLength(100)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("status")
+          .setLabel("Status")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("Active / Hiatus / Kick Next — blank = Active")
+          .setMaxLength(24)
           .setRequired(false)
       )
     );

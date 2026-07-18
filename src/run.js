@@ -87,7 +87,7 @@ export async function runActivityProcess({ channel, date, scan, preview, admin, 
 
   const embed = buildReport({ date, preview, admin, batch, roster, written, flags });
   // Action buttons only make sense once values exist in the sheet.
-  const components = preview ? [] : reportComponents({ review, missing });
+  const components = preview ? [] : reportComponents({ review, missing, unknowns });
 
   await markMessages(screenshotMessages, "done");
 
@@ -98,23 +98,28 @@ export async function runActivityProcess({ channel, date, scan, preview, admin, 
 export async function collectImages(channel, scan) {
   const maxAgeMs = config.extraction.maxImageAgeHours * 3600_000;
   const cutoff = Date.now() - maxAgeMs;
+  const botId = channel.client.user.id;
   const images = [];
   let before;
-  let scanned = 0;
+  let counted = 0; // only the user's (non-bot) messages count toward `scan`
 
-  while (scanned < scan) {
-    const page = await channel.messages.fetch({ limit: Math.min(100, scan - scanned), before });
+  while (counted < scan) {
+    const page = await channel.messages.fetch({ limit: 100, before });
     if (!page.size) break;
     for (const msg of page.values()) {
       if (msg.createdTimestamp < cutoff) return images.reverse();
+      before = msg.id;
+      // The bot's own reply/report/status messages don't count — otherwise the
+      // report it's posting right now would eat a slot and drop the oldest image.
+      if (msg.author.id === botId) continue;
+      counted++;
       for (const att of msg.attachments.values()) {
         if (att.contentType?.startsWith("image/")) {
           images.push({ name: att.name, url: att.url, contentType: att.contentType, message: msg });
         }
       }
+      if (counted >= scan) break;
     }
-    scanned += page.size;
-    before = page.last().id;
   }
   return images.reverse();
 }
